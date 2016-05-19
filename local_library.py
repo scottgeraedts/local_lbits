@@ -33,7 +33,6 @@ class Hamiltonian:
 
 		#make pbc term
 		self.H_pbc=np.zeros([pow(2,N),pow(2,N)],dtype=np.float)
-		t=time.clock()
 		if(pbc):
 			op1=[0.25*sz,0.5*sp,0.5*sm]
 			op2=[sz,sm,sp]
@@ -51,9 +50,6 @@ class Hamiltonian:
 				out=out.reshape([2**N,2**N])
 
 				self.H_pbc+=out	
-			print self.H_pbc	
-		print "time to make pbc",time.clock()-t
-		t=time.clock()
 #		if(pbc):
 #			self.twobody_pbc=[]
 #			for j,op in enumerate([self.sx,self.sy,self.sz]):
@@ -66,7 +62,6 @@ class Hamiltonian:
 
 		self.twobody_ops=[]
 		for i in range(N): self.twobody_ops.append(self.make_twobody(i,level))
-		print "time to make twobody",time.clock()-t
 
 	def MPO_construction(self,h,seed=0,rans=None,alphax=0):
 		t=time.clock()
