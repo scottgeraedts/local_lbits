@@ -39,17 +39,16 @@ def make_operators(operators,v2,Hclass):
 	return Op,kw[-1]
 
 
-Ns=[4,6,8,10,12]
+Ns=[4,6,8,10,12,14]
 h=float(sys.argv[1])
-level=int(sys.argv[2])
 ROD=40
 #t=time.time()
-print_times=True
+print_times=False
 
 for N in Ns:
 	kwfile=open("kw"+str(N),"w")
 	if(print_times): t=time.time()
-	Hclass=ll.Hamiltonian(N,pbc=True,conserve=True,level=level)
+	Hclass=ll.Hamiltonian(N,pbc=True,conserve=True,level=2)
 	print "built Hamiltonian"
 	if(print_times): print "time to init",time.time()-t
 	Ntruncs=[2**(N-5),2**(N-4),2**(N-3),2**(N-2)]
