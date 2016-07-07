@@ -39,12 +39,12 @@ def make_operators(operators,v2,Hclass):
 
 kwfile=open("kw","w")
 
-Ns=[6,8,10,12]
+Ns=[10]
 h=float(sys.argv[1])
 ROD=40
 #t=time.clock()
-print_times=True
-
+print_times=False
+rfile=open("r","a")
 for N in Ns:
 	if(print_times): t=time.clock()
 	Hclass=ll.Hamiltonian(N,pbc=True,conserve=True,level=2)
@@ -56,9 +56,11 @@ for N in Ns:
 #	Mout=np.zeros([ROD,N])
 	failures=np.zeros(len(Ntruncs))
 
+	r=0
 	for seed in range(ROD):
 		if(print_times): t=time.clock()
 		Hclass.MPO_construction(h,seed)
+		r+=Hclass.print_r()
 		if(print_times): print "time to make and solve H",time.clock()-t
 
 #		if(Hclass.conserve): v=Hclass.to_ndarray(Hclass.v)
@@ -108,6 +110,8 @@ for N in Ns:
 		Mout[t_ind,:]=Mout[t_ind,:]/(ROD-failure)
 		newMout[t_ind,:]/=(ROD-failure)
 	print "failures at N=",":",failures	
+	print >>rfile,h,r/ROD
+	rfile.close()
 	np.savetxt("M"+str(N),Mout.transpose())
 	np.savetxt("newM"+str(N),newMout.transpose())
 kwfile.close()	

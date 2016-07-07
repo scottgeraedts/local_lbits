@@ -33,7 +33,6 @@ class Hamiltonian:
 
 		#make pbc term
 		self.H_pbc=np.zeros([pow(2,N),pow(2,N)],dtype=np.float)
-		t=time.clock()
 		if(pbc):
 			op1=[0.25*sz,0.5*sp,0.5*sm]
 			op2=[sz,sm,sp]
@@ -51,9 +50,6 @@ class Hamiltonian:
 				out=out.reshape([2**N,2**N])
 
 				self.H_pbc+=out	
-			print self.H_pbc	
-		print "time to make pbc",time.clock()-t
-		t=time.clock()
 #		if(pbc):
 #			self.twobody_pbc=[]
 #			for j,op in enumerate([self.sx,self.sy,self.sz]):
@@ -64,9 +60,9 @@ class Hamiltonian:
 #				self.H_pbc=self.H_pbc+temp.real
 #				self.twobody_pbc.append(temp.real)
 
-		self.twobody_ops=[]
-		for i in range(N): self.twobody_ops.append(self.make_twobody(i,level))
-		print "time to make twobody",time.clock()-t
+		if level!=-1:
+			self.twobody_ops=[]
+			for i in range(N): self.twobody_ops.append(self.make_twobody(i,level))
 
 	def MPO_construction(self,h,seed=0,rans=None,alphax=0):
 		t=time.clock()
@@ -74,8 +70,8 @@ class Hamiltonian:
 			random.seed(seed)
 			rans=[]
 			ransx=[]
-			for i in range(self.N): rans.append(2*(random.random()-1))
-			for i in range(self.N): ransx.append(2*(random.random()-1))
+			for i in range(self.N): rans.append(random.uniform(-1,1))
+			for i in range(self.N): ransx.append(random.uniform(-1,1))
 		else: ransx=rans
 		
 		first=np.zeros((2,2,5),dtype=float)
@@ -118,14 +114,17 @@ class Hamiltonian:
 		if(self.conserve):
 			q_flat=make_q_flat(self.N)
 			self.perm,H= npc.array.from_ndarray_flat(out,[q_flat,q_flat],bunch=True,sort=True,q_conj=[1,-1])
+			self.H=H
 			self.w,self.v=npc.eigh(H)
 			
 			self.energy_keys=np.argsort(self.w)
 			self.energy_keys=np.argsort(self.energy_keys)
 		else:
+			self.H=out
 			self.w,self.v=spl.eigh(out)
 			
 	def to_ndarray(self,x):
+		if  not self.conserve: return x
 		v=x.to_ndarray()
 		if self.perm is not None: 
 			keys=np.argsort(self.perm[0])
@@ -182,11 +181,20 @@ class Hamiltonian:
 			out.append( (self.assemble([ ((i-1)%N,Sp),(i,Sz),((i+1)%N,Sm)   ])+self.assemble([ ((i-1)%N,Sm),(i,Sz),((i+1)%N,Sp)]))/np.sqrt(2))
 			out.append( (self.assemble([ ((i-1)%N,Sp),(i,Sm),((i+1)%N,Sz)   ])+self.assemble([ ((i-1)%N,Sm),(i,Sp),((i+1)%N,Sz)])) /np.sqrt(2))
 		return np.array(out)
-		
-	def assemble(self,ops):
-		N=self.N
+	
+	def make_flippers(self):
+		Sx=np.zeros((2,2,1,1))
+		Sx[:,:,0,0]=self.sx
+		self.flippers=[]
+		for i in range(self.N): self.flippers.append(self.assemble([(i,Sx)],norm=False,conserve=False))
+		self.flippers=np.array(self.flippers)
+					
+	def assemble(self,ops,N=None,norm=True,conserve=None):
+		if N is None: N=self.N
+		if conserve is None: conserve=self.conserve
 		Id=np.zeros((2,2,1,1))
-		Id[0,0,0,0]=Id[1,1,0,0]=1/np.sqrt(2)
+		if norm: Id[0,0,0,0]=Id[1,1,0,0]=1/np.sqrt(2)
+		else: Id[0,0,0,0]=Id[1,1,0,0]=1
 		sites,ops=zip(*ops)
 		temp=np.ones((1))
 		for i in range(N):
@@ -196,14 +204,23 @@ class Hamiltonian:
 			except ValueError:
 				temp=np.tensordot(temp,Id,([-1],[2]))
 				
-		temp=temp.reshape([2]*(2*self.N))
-		temp=temp.transpose(range(0,2*self.N,2)+range(1,2*self.N,2))
-		temp=temp.reshape([2**self.N]*2)
-		if(self.conserve):
-			q_flat=make_q_flat(self.N)
+		temp=temp.reshape([2]*(2*N))
+		temp=temp.transpose(range(0,2*N,2)+range(1,2*N,2))
+		temp=temp.reshape([2**N]*2)
+		if(conserve):
+			q_flat=make_q_flat(N)
 			perm,temp= npc.array.from_ndarray_flat(temp,[q_flat,q_flat],bunch=True,sort=True,q_conj=[1,-1])
 		return temp
-			
+	
+	def visualize(self,state):
+		N=self.N
+		out=np.zeros(N)
+		for i in range(N):
+#			print self.twobody_ops[i][0]
+#			print np.dot(np.tensordot(self.twobody_ops[i][0],state,([1],[0])),state)
+			out[i]=np.dot(state,np.tensordot(self.twobody_ops[i][0],state,([1],[0])))
+		return out
+
 	def project(self,op,v):
 		if(self.conserve):
 			vtemp=v.shallow_copy()
@@ -213,12 +230,12 @@ class Hamiltonian:
 			return np.tensordot(np.tensordot(v,op,([0],[0])),v,([1],[0]))
 
 	def truncate(self,v,Ntrunc):
-		#decide which indices to project out. Here I'll go with the indices in the middle
-#		start=v.shape[1]//2-Ntrunc//2
-#		if(Ntrunc%2): start=start-1
-#		end=v.shape[1]//2+Ntrunc//2
-		start=v.shape[1]-Ntrunc
-		end=v.shape[1]
+		#decide which indices to project out. 
+		start=v.shape[1]//2-Ntrunc//2
+		if(Ntrunc%2): start=start-1
+		end=v.shape[1]//2+Ntrunc//2
+#		start=v.shape[1]-Ntrunc
+#		end=v.shape[1]
 #		print start,end,Ntrunc
 #		print self.energy_keys
 #		print v.charge
@@ -228,6 +245,7 @@ class Hamiltonian:
 			otheraxis_counter=0
 			v.q_ind[1]=v.q_ind[1].copy()
 			newdat=[]; newqdat=[]
+			qdat_counter=0
 			for charge,dat in enumerate(v.dat):
 #				print np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  <start)
 #				print np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  >=end)
@@ -239,7 +257,9 @@ class Hamiltonian:
 				if temp.shape[1]!=0: 
 					nonempty_sectors.append(charge)
 					newdat.append(temp)
-					newqdat.append(v.q_dat[charge,:])
+#					newqdat.append(v.q_dat[charge,:])
+					newqdat.append([charge,qdat_counter])
+					qdat_counter+=1
 				else: otheraxis_counter=otheraxis_counter+v.dat[charge].shape[0]
 					
 
@@ -251,7 +271,7 @@ class Hamiltonian:
 			nonempty_sectors=np.array(nonempty_sectors)
 			v.q_ind[1]=v.q_ind[1][nonempty_sectors,:]
 			v.dat=newdat
-			v.q_dat=np.array(newqdat)
+			v.q_dat=np.array(newqdat,dtype=np.uint)
 			v.shape[1]=qind_counter
 						
 #			print v.q_ind[0]		
@@ -270,10 +290,34 @@ class Hamiltonian:
 		else:
 			out=np.zeros(v.shape[1])
 			for i in range(v.shape[1]):
-				print np.tensordot(np.tensordot(v[:,i],op,([0],[0])),v[:,i],([0],[0]))
+				#print np.tensordot(np.tensordot(v[:,i],op,([0],[0])),v[:,i],([0],[0]))
 				out[i]=np.tensordot(np.tensordot(v[:,i],op,([0],[0])),v[:,i],([0],[0])).real
 			out=np.diag(out)
 			return out
+			
+	def print_r(self):
+		def getr(x1,x2):
+			if abs(x1)<1e-10 and abs(x2)<1e-10: return 1
+			if x1<x2: 
+			#	print x1,x2
+				return x1/x2
+			else: return x2/x1
+
+		vec_getr=np.vectorize(getr)		
+
+		out=0
+		total_size=0
+		q=self.v.q_ind[0]
+		for charge in range(q.shape[0]):
+		 	e=q[charge,1]
+		 	s=q[charge,0]
+		 	
+		 	if (e-s)<3: continue
+		 	spacings=self.w[s+1:e]-self.w[s:e-1]
+		 	out+=np.mean(vec_getr(spacings[1:],spacings[:-1])*(e-s))
+		 	total_size+=e-s
+		return out/total_size
+
 def make_q_flat(N):
 	q_flat=[]
 	for i in range(pow(2,N)):
