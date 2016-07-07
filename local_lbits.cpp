@@ -91,8 +91,6 @@ LOCAL::LOCAL(int tN){
 
 	int seed=0;
 	ran.seed(seed);
-	
-	lowest_energy=-alpha*N; highest_energy=-lowest_energy;
 
 	alphaz=vector<double>(N);
 	randArray=vector< vector<double> > (ROD, vector<double>(N) );
@@ -121,48 +119,45 @@ void LOCAL::time_evolve(){
 	int ntau=22;
 	double tau;
 	vector<double> EE(ntau,0);
-	//double Jz=alpha;
-	int window_sum=0;
+	double frac=alpha;
+
 	Eigen::VectorXd trunc_eigvals;
 	Eigen::MatrixXd trunc_eigvecs;
-	bool keep_inner=false; //if true we keep the states between lowest_energy and highest_energy, if false we throw out those states
-	
-	
+	bool project_inner=true; //if true we project out states in the middle of the spectrum, if false we project out the top of the spectrum
+	if(project_inner){
+		start_window=rows/2*(1-frac);
+		window=rows*frac;
+	}else{
+		start_window=(1-frac)*rows;
+		window=rows-start_window;
+	}
+	cout<<rows<<" "<<start_window<<" "<<window<<endl;
 	for(int is=0;is<ROD;is++){
 		for(int i=0;i<N;i++) alphaz[i]=h*randArray[is][i];	
 		H=makeDense(bind(&LOCAL::TFIM_conserved,this,placeholders::_1,placeholders::_2,1.) );
 		es.compute(H);
 		
 		Eigen_To_Std(es.eigenvalues(),energies);
-		start_window=(lower_bound(energies.begin(),energies.end(),lowest_energy)-energies.begin());
-		window=(upper_bound(energies.begin(),energies.end(),highest_energy)-energies.begin())-start_window;
-		if(keep_inner) window_sum+=window;
-		else window_sum+=rows-window;
-		if(window<=0) continue;
 
 		for (int t=0;t<ntau;t++){
 			tau=taus[t];
-			if(keep_inner)
-				EH=(  (es.eigenvalues().segment(start_window,window).array()*tau*complex<double>(0,1)).exp()  );
-			else{
-				trunc_eigvals=Eigen::VectorXd(rows-window);
-				for(int i=0;i<start_window;i++) trunc_eigvals(i)=es.eigenvalues()(i);
-				for(int i=start_window+window;i<rows;i++) trunc_eigvals(i-window)=es.eigenvalues()(i);
-				EH=(  (trunc_eigvals.array()*tau*complex<double>(0,1)).exp()  );
-			}	
+
+			trunc_eigvals=Eigen::VectorXd(rows-window);
+			for(int i=0;i<start_window;i++) trunc_eigvals(i)=es.eigenvalues()(i);
+			for(int i=start_window+window;i<rows;i++) trunc_eigvals(i-window)=es.eigenvalues()(i);
+			EH=(  (trunc_eigvals.array()*tau*complex<double>(0,1)).exp()  );
+
 			EHD=Eigen::DiagonalMatrix<complex<double>,-1,-1> (EH);
-			if(keep_inner)
-				U=es.eigenvectors().middleCols(start_window,window)*EHD*es.eigenvectors().middleCols(start_window,window).adjoint();
-			else{
-				trunc_eigvecs=Eigen::MatrixXd(rows,rows-window);
-				for(int i=0;i<start_window;i++){
-					for(int j=0;j<rows;j++) trunc_eigvecs(j,i)=es.eigenvectors().col(i)(j);
-				}
-				for(int i=start_window+window;i<rows;i++){
-					for(int j=0;j<rows;j++) trunc_eigvecs(j,i-window)=es.eigenvectors().col(i)(j);
-				}
-				U=trunc_eigvecs*EHD*trunc_eigvecs.adjoint();				
+
+			trunc_eigvecs=Eigen::MatrixXd(rows,rows-window);
+			for(int i=0;i<start_window;i++){
+				for(int j=0;j<rows;j++) trunc_eigvecs(j,i)=es.eigenvectors().col(i)(j);
 			}
+			for(int i=start_window+window;i<rows;i++){
+				for(int j=0;j<rows;j++) trunc_eigvecs(j,i-window)=es.eigenvectors().col(i)(j);
+			}
+			U=trunc_eigvecs*EHD*trunc_eigvecs.adjoint();				
+
 			for(int j=0;j<n_trial_states;j++){
 //				Eigen::VectorXd temp=es.eigenvectors().row(trial_states[j]);
 //				temp=es.eigenvectors().middleCols(start_window,window)*temp.segment(start_window,window);
@@ -177,7 +172,6 @@ void LOCAL::time_evolve(){
 	ofstream Eout("EE");
 	for(int i=0;i<ntau;i++) Eout<<taus[i]<<" "<<EE[i]/(1.*ROD*n_trial_states)<<endl;
 	Eout.close();
-	cout<<window_sum/(1.*rows*ROD)<<endl;
 }
 void LOCAL::run(){
 	double hlist[]={h};
