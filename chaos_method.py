@@ -57,6 +57,7 @@ ROD=40
 print_times=False
 
 newkwfile=open("newkw","w")
+
 for N in Ns:
 	kwfile=open("kw"+str(N),"w")
 	if(print_times): t=time.time()
@@ -126,6 +127,8 @@ for N in Ns:
 		Mout[t_ind,:]=Mout[t_ind,:]/(ROD-failure)
 		newMout[t_ind,:]/=(ROD-failure)
 	print "failures at N=",":",failures	
+	print >>rfile,h,r/ROD
+	rfile.close()
 	np.savetxt("M"+str(N),Mout.transpose())
 	np.savetxt("newM"+str(N),newMout.transpose())
 	
