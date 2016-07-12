@@ -212,8 +212,10 @@ class Hamiltonian:
 #		start=v.shape[1]//2-Ntrunc//2
 #		if(Ntrunc%2): start=start-1
 #		end=v.shape[1]//2+Ntrunc//2
-		start=v.shape[1]-Ntrunc
-		end=v.shape[1]
+		start=Ntrunc//2
+		end=2**self.N-Ntrunc//2
+#		start=v.shape[1]-Ntrunc
+#		end=v.shape[1]
 #		print start,end,Ntrunc
 #		print self.energy_keys
 #		print v.charge
@@ -223,18 +225,22 @@ class Hamiltonian:
 			otheraxis_counter=0
 			v.q_ind[1]=v.q_ind[1].copy()
 			newdat=[]; newqdat=[]
+			qdat_counter=0
 			for charge,dat in enumerate(v.dat):
-#				print np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  <start)
-#				print np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  >=end)
-				temp=v.dat[charge][:,np.concatenate([np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  <start)[0],
-					np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  >=end)[0]])]
+#				print np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  >=start)
+#				print np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  <end)
+		#		temp=v.dat[charge][:,np.concatenate([np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  <start)[0],
+		#			np.where(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]  >=end)[0]])]
+				temp=v.dat[charge][:,np.where( np.array(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]>= start) &
+					np.array(self.energy_keys[v.q_ind[1][charge,0]:v.q_ind[1][charge,1]]<end))[0]]
 				v.q_ind[1][charge,0]=qind_counter
 				qind_counter=temp.shape[1]+qind_counter
 				v.q_ind[1][charge,1]=qind_counter
 				if temp.shape[1]!=0: 
 					nonempty_sectors.append(charge)
 					newdat.append(temp)
-					newqdat.append(v.q_dat[charge,:])
+					newqdat.append([charge,qdat_counter])
+					qdat_counter+=1
 				else: otheraxis_counter=otheraxis_counter+v.dat[charge].shape[0]
 					
 
@@ -246,7 +252,7 @@ class Hamiltonian:
 			nonempty_sectors=np.array(nonempty_sectors)
 			v.q_ind[1]=v.q_ind[1][nonempty_sectors,:]
 			v.dat=newdat
-			v.q_dat=np.array(newqdat)
+			v.q_dat=np.array(newqdat,dtype=np.uint)
 			v.shape[1]=qind_counter
 						
 #			print v.q_ind[0]		
