@@ -50,28 +50,29 @@ def commuting_lambda(operators,v2,Hclass,diagop=True):
 			outop+=np.tensordot(op,Hop,([0,1],[0,1]))*Hop
 		lam.append(spl.norm(outop)/spl.norm(op))
 	return lam
+
+newkwfile=open("newkw","w")
+
 Ns=[4,6,8]
 h=float(sys.argv[1])
 ROD=40
 #t=time.time()
 print_times=False
 
-newkwfile=open("newkw","w")
-
 for N in Ns:
 	kwfile=open("kw"+str(N),"w")
 	if(print_times): t=time.time()
-	Hclass=ll.Hamiltonian(N,pbc=True,conserve=True,level=5)
+	Hclass=ll.Hamiltonian(N,pbc=True,conserve=True,level=1)
 	print "built Hamiltonian"
 	if(print_times): print "time to init",time.time()-t
 	Ntruncs=[2**(N-5),2**(N-4),2**(N-3),2**(N-2)]
 	#Ntruncs=[2**(N-2)]
+	newkw=np.zeros(len(Ntruncs))
 	Mout=np.zeros([len(Ntruncs),N])
 	newMout=np.zeros([len(Ntruncs),N])
 #	Mout=np.zeros([ROD,N])
 	failures=np.zeros(len(Ntruncs))
 
-	newkw=np.zeros(len(Ntruncs))
 	for seed in range(ROD):
 		if(print_times): t=time.time()
 		Hclass.MPO_construction(h,seed)
@@ -107,7 +108,6 @@ for N in Ns:
 			diagops=[np.diagonal(best_op.to_ndarray()) for best_op in best_ops]
 			#compute the Mij
 			if(print_times): ti=time.time()
-#			print commuting_lambda(best_ops,v2,Hclass,False)
 			newkw[t_ind]+=np.mean(commuting_lambda(diagops,v2,Hclass))
 		
 			for i in range(N):
@@ -122,19 +122,16 @@ for N in Ns:
 			Mout[t_ind,:]=Mout[t_ind,:]+np.mean(abs(M),axis=0)
 			newMout[t_ind,:]=newMout[t_ind,:]+np.mean(abs(M2),axis=0)
 			if(print_times): print  "time to get the Ms",time.time()-ti
-	
+	print >>newkwfile,N,
+	for i in range(len(newkw)):
+		print >>newkwfile,newkw[i]/(ROD-failures[i]),
+	print >>newkwfile
+
 	for t_ind,failure in enumerate(failures):
 		Mout[t_ind,:]=Mout[t_ind,:]/(ROD-failure)
 		newMout[t_ind,:]/=(ROD-failure)
 	print "failures at N=",":",failures	
-	print >>rfile,h,r/ROD
-	rfile.close()
 	np.savetxt("M"+str(N),Mout.transpose())
 	np.savetxt("newM"+str(N),newMout.transpose())
-	
-	print >>newkwfile,N,
-	for i in range(len(newkw)):
-		print >>newkwfile,newkw[i]/(ROD-failure),
-	print >>newkwfile
 	kwfile.close()	
-newkwfile.close
+newkwfile.close()	
